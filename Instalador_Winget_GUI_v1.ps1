@@ -118,6 +118,17 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 }
 
 # ---------------------------------------------------
+# HABILITA O RECURSO NECESSARIO PARA --ignore-security-hash FUNCIONAR
+# ---------------------------------------------------
+# Sem isso, o winget recusa a flag --ignore-security-hash mesmo passada
+# no comando (fica so mostrando a ajuda), exatamente como aconteceu antes.
+try {
+    winget settings --enable InstallerHashOverride *> $null
+} catch {
+    # Nao bloqueia o script se falhar - alguns pacotes so vao falhar por hash depois
+}
+
+# ---------------------------------------------------
 # VERIFICACAO DE CONEXAO COM A INTERNET
 # ---------------------------------------------------
 $Online = Test-Connection -ComputerName '8.8.8.8' -Count 1 -Quiet -ErrorAction SilentlyContinue
@@ -510,7 +521,7 @@ function Start-InstallJob {
                     $Marker     = Join-Path $env:TEMP ('spotify_marker_' + [guid]::NewGuid().ToString('N') + '.txt')
                     $SpotifyLog = Join-Path $env:TEMP ('spotify_out_' + [guid]::NewGuid().ToString('N') + '.txt')
                     $HelperBat  = Join-Path $env:TEMP ('spotify_install_' + [guid]::NewGuid().ToString('N') + '.bat')
-                    $BatBody    = "@echo off`r`n`"$WingetExe`" install --id Spotify.Spotify --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$SpotifyLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
+                    $BatBody    = "@echo off`r`nchcp 65001 >nul`r`n`"$WingetExe`" install --id Spotify.Spotify --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$SpotifyLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
                     Set-Content -Path $HelperBat -Value $BatBody -Encoding ASCII
 
                     Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$HelperBat`""
@@ -530,7 +541,7 @@ function Start-InstallJob {
                     }
 
                     if (Test-Path $SpotifyLog) {
-                        Get-Content -Path $SpotifyLog -Raw | Add-Content -Path $Log -Encoding utf8
+                        Get-Content -Path $SpotifyLog -Raw -Encoding UTF8 | Add-Content -Path $Log -Encoding utf8
                         Remove-Item -Path $SpotifyLog -Force -ErrorAction SilentlyContinue
                     }
                     Remove-Item -Path $HelperBat -Force -ErrorAction SilentlyContinue
