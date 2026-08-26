@@ -274,7 +274,7 @@ try {
     $BuildNum  = [int]$OsInfo.BuildNumber
     $OsCaption = $OsInfo.Caption -replace 'Microsoft ', ''
     $Arch      = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
-    $LogoFileName = if ($BuildNum -ge 22000) { 'Windows_11_logo.png' } else { 'Windows_10_logo.png' }
+    $LogoFileName = if ($BuildNum -ge 22000) { 'Win11.png' } else { 'Win10.png' }
     $TxtOsInfo.Text = "$OsCaption ($Arch) - Build $BuildNum"
 } catch {
     $LogoFileName = $null
@@ -287,9 +287,9 @@ if ($LogoFileName) {
         param($Url)
         try {
             $Response = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
-            return $Response.Content
+            return [PSCustomObject]@{ Bytes = $Response.Content; Error = $null }
         } catch {
-            return $null
+            return [PSCustomObject]@{ Bytes = $null; Error = $_.Exception.Message }
         }
     } -ArgumentList $LogoUrl
 
@@ -299,11 +299,12 @@ if ($LogoFileName) {
         if ($null -eq $script:LogoJob) { return }
         if ($script:LogoJob.State -ne 'Completed') { return }
 
-        $Bytes = Receive-Job -Job $script:LogoJob -ErrorAction SilentlyContinue
+        $Result = Receive-Job -Job $script:LogoJob -ErrorAction SilentlyContinue
         Remove-Job -Job $script:LogoJob -Force
         $script:LogoJob = $null
         $TimerLogo.Stop()
 
+        $Bytes = $Result.Bytes
         if ($Bytes -and $Bytes.Length -gt 0) {
             try {
                 $Stream = New-Object System.IO.MemoryStream(, [byte[]]$Bytes)
@@ -317,7 +318,11 @@ if ($LogoFileName) {
                 $ImgOsLogo.Visibility = 'Visible'
             } catch {
                 $ImgOsLogo.Visibility = 'Collapsed'
+                $TxtStatus.Text = "Logo baixado mas nao pode ser exibido: $($_.Exception.Message)"
             }
+        } else {
+            $ImgOsLogo.Visibility = 'Collapsed'
+            $TxtStatus.Text = "Nao foi possivel baixar o logo ($LogoUrl): $($Result.Error)"
         }
     })
     $TimerLogo.Start()
