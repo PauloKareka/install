@@ -45,29 +45,42 @@ Add-Type -AssemblyName WindowsBase
 # ---------------------------------------------------
 function Install-WingetIfMissing {
     $TempDir = Join-Path $env:TEMP 'WingetBootstrap'
-    if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+    if (Test-Path $TempDir) { Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 
     try {
-        Write-Host '[INFO] Baixando dependencia: Microsoft.VCLibs...' -ForegroundColor Yellow
-        $VCLibsUrl  = 'https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx'
-        $VCLibsPath = Join-Path $TempDir 'VCLibs.appx'
-        Invoke-WebRequest -Uri $VCLibsUrl -OutFile $VCLibsPath -UseBasicParsing -ErrorAction Stop
-        Add-AppxPackage -Path $VCLibsPath -ErrorAction SilentlyContinue
-
-        Write-Host '[INFO] Baixando dependencia: Microsoft.UI.Xaml...' -ForegroundColor Yellow
-        $XamlRelease = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/microsoft-ui-xaml/releases/latest' -UseBasicParsing -ErrorAction Stop
-        $XamlAsset   = $XamlRelease.assets | Where-Object { $_.name -like '*x64.appx' } | Select-Object -First 1
-        if ($XamlAsset) {
-            $XamlPath = Join-Path $TempDir $XamlAsset.name
-            Invoke-WebRequest -Uri $XamlAsset.browser_download_url -OutFile $XamlPath -UseBasicParsing -ErrorAction Stop
-            Add-AppxPackage -Path $XamlPath -ErrorAction SilentlyContinue
-        }
-
-        Write-Host '[INFO] Baixando o Winget (App Installer) mais recente...' -ForegroundColor Yellow
+        Write-Host '[INFO] Consultando a release mais recente do winget...' -ForegroundColor Yellow
         $WingetRelease = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest' -UseBasicParsing -ErrorAction Stop
-        $WingetAsset   = $WingetRelease.assets | Where-Object { $_.name -like '*.msixbundle' } | Select-Object -First 1
+
+        $WingetAsset = $WingetRelease.assets | Where-Object { $_.name -like '*.msixbundle' } | Select-Object -First 1
+        $DepsAsset   = $WingetRelease.assets | Where-Object { $_.name -eq 'DesktopAppInstaller_Dependencies.zip' } | Select-Object -First 1
+
         if (-not $WingetAsset) { throw 'Nao foi possivel encontrar o instalador do winget na release mais recente.' }
 
+        # As dependencias (VCLibs, UI.Xaml, WindowsAppRuntime) vem empacotadas pelo
+        # proprio time do winget, ja na versao compativel com esta release especifica.
+        if ($DepsAsset) {
+            Write-Host '[INFO] Baixando dependencias oficiais do winget...' -ForegroundColor Yellow
+            $DepsZipPath = Join-Path $TempDir 'Dependencies.zip'
+            Invoke-WebRequest -Uri $DepsAsset.browser_download_url -OutFile $DepsZipPath -UseBasicParsing -ErrorAction Stop
+
+            $DepsExtractPath = Join-Path $TempDir 'Dependencies'
+            Expand-Archive -Path $DepsZipPath -DestinationPath $DepsExtractPath -Force
+
+            $Arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
+            $ArchFolder = Get-ChildItem -Path $DepsExtractPath -Directory -Recurse | Where-Object { $_.Name -eq $Arch } | Select-Object -First 1
+
+            if ($ArchFolder) {
+                Write-Host "[INFO] Instalando dependencias ($Arch)..." -ForegroundColor Yellow
+                $DepFiles = @(Get-ChildItem -Path $ArchFolder.FullName -Filter '*.appx' -ErrorAction SilentlyContinue)
+                $DepFiles += @(Get-ChildItem -Path $ArchFolder.FullName -Filter '*.msix' -ErrorAction SilentlyContinue)
+                foreach ($Dep in $DepFiles) {
+                    Add-AppxPackage -Path $Dep.FullName -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        Write-Host '[INFO] Baixando o Winget (App Installer)...' -ForegroundColor Yellow
         $WingetPath = Join-Path $TempDir $WingetAsset.name
         Invoke-WebRequest -Uri $WingetAsset.browser_download_url -OutFile $WingetPath -UseBasicParsing -ErrorAction Stop
 
