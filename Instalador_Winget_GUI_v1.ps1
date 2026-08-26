@@ -192,7 +192,7 @@ $Opcionais = @(
     [PSCustomObject]@{ Name = 'OrcaSlicer'; Id = 'SoftFever.OrcaSlicer' }
     [PSCustomObject]@{ Name = 'VidBee'; Id = 'Nexmoe.VidBee' }
     [PSCustomObject]@{ Name = 'Telegram Desktop'; Id = 'Telegram.TelegramDesktop' }
-    [PSCustomObject]@{ Name = 'WhatsApp'; Id = 'WhatsApp.WhatsApp.Beta' }
+    [PSCustomObject]@{ Name = 'WhatsApp'; Id = '9NKSQGP7F2NH' }
     [PSCustomObject]@{ Name = 'CrystalDiskInfo'; Id = 'CrystalDewWorld.CrystalDiskInfo' }
     [PSCustomObject]@{ Name = 'Revo Uninstaller Free'; Id = 'RevoUninstaller.RevoUninstaller' }
     [PSCustomObject]@{ Name = 'Spotify'; Id = 'Spotify.Spotify' }
@@ -498,9 +498,52 @@ function Start-InstallJob {
         foreach ($It in $Items) {
             Add-Content -Path $Log -Value ('[PROCESSO] Tentando instalar/verificar ' + $It.Name) -Encoding utf8
             Add-Content -Path $Log -Value ('----- SAIDA WINGET: ' + $It.Name + ' -----') -Encoding utf8
-            $Out  = & winget install --id $It.Id --silent --accept-source-agreements --accept-package-agreements 2>&1
-            $Code = $LASTEXITCODE
-            $Out | Add-Content -Path $Log -Encoding utf8
+
+            if ($It.Id -eq 'Spotify.Spotify') {
+                # O instalador do Spotify se recusa a rodar em processo elevado (limitacao
+                # conhecida do proprio Spotify, sem solucao oficial do winget). Contorno:
+                # dispara a instalacao via explorer.exe, que roda no nivel normal do
+                # usuario (nao-elevado), e aguarda a conclusao por um arquivo marcador.
+                Add-Content -Path $Log -Value '[INFO] Spotify nao permite instalacao em contexto elevado - usando processo nao-elevado (pode levar ate 3 minutos)' -Encoding utf8
+                try {
+                    $WingetExe  = (Get-Command winget -ErrorAction Stop).Source
+                    $Marker     = Join-Path $env:TEMP ('spotify_marker_' + [guid]::NewGuid().ToString('N') + '.txt')
+                    $SpotifyLog = Join-Path $env:TEMP ('spotify_out_' + [guid]::NewGuid().ToString('N') + '.txt')
+                    $HelperBat  = Join-Path $env:TEMP ('spotify_install_' + [guid]::NewGuid().ToString('N') + '.bat')
+                    $BatBody    = "@echo off`r`n`"$WingetExe`" install --id Spotify.Spotify --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$SpotifyLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
+                    Set-Content -Path $HelperBat -Value $BatBody -Encoding ASCII
+
+                    Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$HelperBat`""
+
+                    $Waited = 0
+                    while (-not (Test-Path $Marker) -and $Waited -lt 180) {
+                        Start-Sleep -Seconds 2
+                        $Waited += 2
+                    }
+
+                    if (Test-Path $Marker) {
+                        $Code = [int]((Get-Content -Path $Marker -Raw).Trim())
+                        Remove-Item -Path $Marker -Force -ErrorAction SilentlyContinue
+                    } else {
+                        $Code = -1
+                        Add-Content -Path $Log -Value '[AVISO] Tempo limite atingido aguardando a instalacao nao-elevada do Spotify.' -Encoding utf8
+                    }
+
+                    if (Test-Path $SpotifyLog) {
+                        Get-Content -Path $SpotifyLog -Raw | Add-Content -Path $Log -Encoding utf8
+                        Remove-Item -Path $SpotifyLog -Force -ErrorAction SilentlyContinue
+                    }
+                    Remove-Item -Path $HelperBat -Force -ErrorAction SilentlyContinue
+                } catch {
+                    Add-Content -Path $Log -Value ('[ERRO] Falha ao preparar instalacao nao-elevada do Spotify: ' + $_.Exception.Message) -Encoding utf8
+                    $Code = -1
+                }
+            } else {
+                $Out  = & winget install --id $It.Id --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash 2>&1
+                $Code = $LASTEXITCODE
+                $Out | Add-Content -Path $Log -Encoding utf8
+            }
+
             Add-Content -Path $Log -Value '' -Encoding utf8
             Add-Content -Path $Log -Value '---------------------------------------------------' -Encoding utf8
             [PSCustomObject]@{ Name = $It.Name; Id = $It.Id; ExitCode = $Code }
