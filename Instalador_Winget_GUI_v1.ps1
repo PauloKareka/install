@@ -1,4 +1,7 @@
-﻿# ===================================================
+param(
+    [string]$LocalPath
+)
+# ===================================================
 # Instalador Multi-Modos Winget PRO - GUI (WPF)
 # Versao: GUI v1
 # ===================================================
@@ -7,7 +10,7 @@
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
 # Edite estas duas linhas com o seu repositorio antes de publicar.
 # ScriptUrl   = link "raw" deste proprio arquivo .ps1 no GitHub
-# LogoBaseUrl = pasta "raw" onde estao win10.png e win11.png no GitHub
+# LogoBaseUrl = pasta "raw" onde estao os logos no GitHub
 # ---------------------------------------------------
 $ScriptUrl   = 'https://raw.githubusercontent.com/PauloKareka/install/main/Instalador_Winget_GUI_v1.ps1'
 $LogoBaseUrl = 'https://raw.githubusercontent.com/PauloKareka/install/main/assets/'
@@ -17,8 +20,13 @@ $LogoBaseUrl = 'https://raw.githubusercontent.com/PauloKareka/install/main/asset
 # ---------------------------------------------------
 $CurrentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $CurrentPrincipal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    if ($PSCommandPath) {
-        # Rodando como arquivo .ps1 salvo localmente
+    if ($LocalPath -and (Test-Path $LocalPath)) {
+        # Rodando localmente via o lancador .bat (le o arquivo como UTF-8 e reexecuta)
+        $EscapedPath = $LocalPath.Replace("'", "''")
+        $Cmd = "`$c=[IO.File]::ReadAllText('$EscapedPath',[Text.Encoding]::UTF8); `$sb=[ScriptBlock]::Create(`$c); & `$sb -LocalPath '$EscapedPath'"
+        Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$Cmd`"" -Verb RunAs
+    } elseif ($PSCommandPath) {
+        # Rodando como arquivo .ps1 aberto diretamente (sem o lancador .bat)
         Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     } else {
         # Rodando via "irm URL | iex" (sem arquivo local) - relanca baixando de novo, ja elevado
