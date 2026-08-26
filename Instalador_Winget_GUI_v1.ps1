@@ -41,11 +41,67 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
 # ---------------------------------------------------
+# INSTALACAO AUTOMATICA DO WINGET (SE NAO ESTIVER PRESENTE)
+# ---------------------------------------------------
+function Install-WingetIfMissing {
+    $TempDir = Join-Path $env:TEMP 'WingetBootstrap'
+    if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
+    try {
+        Write-Host '[INFO] Baixando dependencia: Microsoft.VCLibs...' -ForegroundColor Yellow
+        $VCLibsUrl  = 'https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx'
+        $VCLibsPath = Join-Path $TempDir 'VCLibs.appx'
+        Invoke-WebRequest -Uri $VCLibsUrl -OutFile $VCLibsPath -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path $VCLibsPath -ErrorAction SilentlyContinue
+
+        Write-Host '[INFO] Baixando dependencia: Microsoft.UI.Xaml...' -ForegroundColor Yellow
+        $XamlRelease = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/microsoft-ui-xaml/releases/latest' -UseBasicParsing -ErrorAction Stop
+        $XamlAsset   = $XamlRelease.assets | Where-Object { $_.name -like '*x64.appx' } | Select-Object -First 1
+        if ($XamlAsset) {
+            $XamlPath = Join-Path $TempDir $XamlAsset.name
+            Invoke-WebRequest -Uri $XamlAsset.browser_download_url -OutFile $XamlPath -UseBasicParsing -ErrorAction Stop
+            Add-AppxPackage -Path $XamlPath -ErrorAction SilentlyContinue
+        }
+
+        Write-Host '[INFO] Baixando o Winget (App Installer) mais recente...' -ForegroundColor Yellow
+        $WingetRelease = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest' -UseBasicParsing -ErrorAction Stop
+        $WingetAsset   = $WingetRelease.assets | Where-Object { $_.name -like '*.msixbundle' } | Select-Object -First 1
+        if (-not $WingetAsset) { throw 'Nao foi possivel encontrar o instalador do winget na release mais recente.' }
+
+        $WingetPath = Join-Path $TempDir $WingetAsset.name
+        Invoke-WebRequest -Uri $WingetAsset.browser_download_url -OutFile $WingetPath -UseBasicParsing -ErrorAction Stop
+
+        Write-Host '[INFO] Instalando o Winget...' -ForegroundColor Yellow
+        Add-AppxPackage -Path $WingetPath -ErrorAction Stop
+
+        # Atualiza o PATH da sessao atual, ja que o winget acabou de ser registrado
+        $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+        Start-Sleep -Seconds 2
+
+        return [bool](Get-Command winget -ErrorAction SilentlyContinue)
+    } catch {
+        Write-Host "[ERRO] Falha ao instalar o winget automaticamente: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+# ---------------------------------------------------
 # VERIFICACAO DO WINGET
 # ---------------------------------------------------
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    [System.Windows.MessageBox]::Show('Winget nao encontrado. Instale o Windows Package Manager.', 'Erro', 'OK', 'Error') | Out-Null
-    exit
+    Write-Host ''
+    Write-Host '[INFO] Winget nao foi encontrado neste sistema.' -ForegroundColor Yellow
+    Write-Host '[INFO] Tentando instalar o Winget automaticamente (App Installer)...' -ForegroundColor Yellow
+
+    $WingetInstalled = Install-WingetIfMissing
+
+    if (-not $WingetInstalled) {
+        [System.Windows.MessageBox]::Show("Nao foi possivel instalar o Winget automaticamente (verifique tambem sua conexao com a internet).`n`nInstale manualmente pela Microsoft Store (busque por 'App Installer') ou baixe em https://aka.ms/getwinget, depois execute este script novamente.", 'Winget nao encontrado', 'OK', 'Error') | Out-Null
+        exit
+    }
+
+    Write-Host '[OK] Winget instalado com sucesso!' -ForegroundColor Green
+    Start-Sleep -Seconds 2
 }
 
 # ---------------------------------------------------
