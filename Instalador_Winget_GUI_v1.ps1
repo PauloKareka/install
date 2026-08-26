@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v1.8 (2026-08-26)'
+$ScriptVersion = 'v1.9 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -601,6 +601,11 @@ $BtnInstalar.Add_Click({
         return
     }
 
+    $RestoreResp = [System.Windows.MessageBox]::Show('Deseja criar um Ponto de Restauracao do Windows antes de instalar?', 'Ponto de Restauracao', 'YesNo', 'Question')
+    if ($RestoreResp -eq 'Yes') {
+        Invoke-CreateRestorePoint
+    }
+
     # Expande IrfanView -> Plugins automaticamente
     # (o pacote de Idioma BR nao existe no winget, apenas no Chocolatey)
     $Expanded = New-Object System.Collections.Generic.List[Object]
@@ -720,8 +725,7 @@ $TimerUpgrade.Add_Tick({
 # ---------------------------------------------------
 # PONTO DE RESTAURACAO DO WINDOWS
 # ---------------------------------------------------
-$BtnRestore.Add_Click({
-    $BtnRestore.IsEnabled = $false
+function Invoke-CreateRestorePoint {
     $TxtStatus.Text = 'Criando ponto de restauracao...'
     $TxtLog.AppendText("[PROCESSO] Tentando criar Ponto de Restauracao do Windows`r`n")
     Add-Content -Path $LogFile -Value '[PROCESSO] Tentando criar Ponto de Restauracao do Windows' -Encoding utf8
@@ -737,6 +741,11 @@ $BtnRestore.Add_Click({
         $TxtStatus.Text = 'Falha ao criar ponto de restauracao (veja o log).'
     }
     $TxtLog.ScrollToEnd()
+}
+
+$BtnRestore.Add_Click({
+    $BtnRestore.IsEnabled = $false
+    Invoke-CreateRestorePoint
     $BtnRestore.IsEnabled = $true
 })
 
