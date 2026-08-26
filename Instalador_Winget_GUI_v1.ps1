@@ -506,53 +506,68 @@ function Start-InstallJob {
         param($Items, $Log)
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         $OutputEncoding = [System.Text.Encoding]::UTF8
+
+        # Alguns instaladores (Spotify sempre, outros as vezes por causa de hash
+        # desatualizado no manifesto) se recusam a rodar em processo elevado.
+        # Este contorno dispara a instalacao via explorer.exe, que roda no nivel
+        # normal do usuario (nao-elevado), e aguarda a conclusao por um marcador.
+        function Install-PackageNonElevated {
+            param([string]$PackageId, [string]$LogPath)
+            try {
+                $WingetExe = (Get-Command winget -ErrorAction Stop).Source
+                $Marker    = Join-Path $env:TEMP ('nonelev_marker_' + [guid]::NewGuid().ToString('N') + '.txt')
+                $OutLog    = Join-Path $env:TEMP ('nonelev_out_' + [guid]::NewGuid().ToString('N') + '.txt')
+                $HelperBat = Join-Path $env:TEMP ('nonelev_install_' + [guid]::NewGuid().ToString('N') + '.bat')
+                $BatBody   = "@echo off`r`nchcp 65001 >nul`r`n`"$WingetExe`" install --id $PackageId --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$OutLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
+                Set-Content -Path $HelperBat -Value $BatBody -Encoding ASCII
+
+                Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$HelperBat`""
+
+                $Waited = 0
+                while (-not (Test-Path $Marker) -and $Waited -lt 180) {
+                    Start-Sleep -Seconds 2
+                    $Waited += 2
+                }
+
+                if (Test-Path $Marker) {
+                    $ResultCode = [int]((Get-Content -Path $Marker -Raw).Trim())
+                    Remove-Item -Path $Marker -Force -ErrorAction SilentlyContinue
+                } else {
+                    $ResultCode = -1
+                    Add-Content -Path $LogPath -Value '[AVISO] Tempo limite atingido aguardando a instalacao nao-elevada.' -Encoding utf8
+                }
+
+                if (Test-Path $OutLog) {
+                    Get-Content -Path $OutLog -Raw -Encoding UTF8 | Add-Content -Path $LogPath -Encoding utf8
+                    Remove-Item -Path $OutLog -Force -ErrorAction SilentlyContinue
+                }
+                Remove-Item -Path $HelperBat -Force -ErrorAction SilentlyContinue
+
+                return $ResultCode
+            } catch {
+                Add-Content -Path $LogPath -Value ('[ERRO] Falha ao preparar instalacao nao-elevada: ' + $_.Exception.Message) -Encoding utf8
+                return -1
+            }
+        }
+
         foreach ($It in $Items) {
             Add-Content -Path $Log -Value ('[PROCESSO] Tentando instalar/verificar ' + $It.Name) -Encoding utf8
             Add-Content -Path $Log -Value ('----- SAIDA WINGET: ' + $It.Name + ' -----') -Encoding utf8
 
             if ($It.Id -eq 'Spotify.Spotify') {
-                # O instalador do Spotify se recusa a rodar em processo elevado (limitacao
-                # conhecida do proprio Spotify, sem solucao oficial do winget). Contorno:
-                # dispara a instalacao via explorer.exe, que roda no nivel normal do
-                # usuario (nao-elevado), e aguarda a conclusao por um arquivo marcador.
+                # Spotify sempre recusa contexto elevado - vai direto pelo caminho nao-elevado
                 Add-Content -Path $Log -Value '[INFO] Spotify nao permite instalacao em contexto elevado - usando processo nao-elevado (pode levar ate 3 minutos)' -Encoding utf8
-                try {
-                    $WingetExe  = (Get-Command winget -ErrorAction Stop).Source
-                    $Marker     = Join-Path $env:TEMP ('spotify_marker_' + [guid]::NewGuid().ToString('N') + '.txt')
-                    $SpotifyLog = Join-Path $env:TEMP ('spotify_out_' + [guid]::NewGuid().ToString('N') + '.txt')
-                    $HelperBat  = Join-Path $env:TEMP ('spotify_install_' + [guid]::NewGuid().ToString('N') + '.bat')
-                    $BatBody    = "@echo off`r`nchcp 65001 >nul`r`n`"$WingetExe`" install --id Spotify.Spotify --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$SpotifyLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
-                    Set-Content -Path $HelperBat -Value $BatBody -Encoding ASCII
-
-                    Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$HelperBat`""
-
-                    $Waited = 0
-                    while (-not (Test-Path $Marker) -and $Waited -lt 180) {
-                        Start-Sleep -Seconds 2
-                        $Waited += 2
-                    }
-
-                    if (Test-Path $Marker) {
-                        $Code = [int]((Get-Content -Path $Marker -Raw).Trim())
-                        Remove-Item -Path $Marker -Force -ErrorAction SilentlyContinue
-                    } else {
-                        $Code = -1
-                        Add-Content -Path $Log -Value '[AVISO] Tempo limite atingido aguardando a instalacao nao-elevada do Spotify.' -Encoding utf8
-                    }
-
-                    if (Test-Path $SpotifyLog) {
-                        Get-Content -Path $SpotifyLog -Raw -Encoding UTF8 | Add-Content -Path $Log -Encoding utf8
-                        Remove-Item -Path $SpotifyLog -Force -ErrorAction SilentlyContinue
-                    }
-                    Remove-Item -Path $HelperBat -Force -ErrorAction SilentlyContinue
-                } catch {
-                    Add-Content -Path $Log -Value ('[ERRO] Falha ao preparar instalacao nao-elevada do Spotify: ' + $_.Exception.Message) -Encoding utf8
-                    $Code = -1
-                }
+                $Code = Install-PackageNonElevated -PackageId $It.Id -LogPath $Log
             } else {
-                $Out  = & winget install --id $It.Id --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash 2>&1
-                $Code = $LASTEXITCODE
+                $Out     = & winget install --id $It.Id --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash 2>&1
+                $Code    = $LASTEXITCODE
+                $OutText = ($Out | Out-String)
                 $Out | Add-Content -Path $Log -Encoding utf8
+
+                if ($Code -ne 0 -and $Code -ne -1978335189 -and $OutText -match '(?i)hash' -and $OutText -match '(?i)administrat') {
+                    Add-Content -Path $Log -Value '[INFO] Falha por restricao de hash em contexto elevado - tentando via processo nao-elevado...' -Encoding utf8
+                    $Code = Install-PackageNonElevated -PackageId $It.Id -LogPath $Log
+                }
             }
 
             Add-Content -Path $Log -Value '' -Encoding utf8
