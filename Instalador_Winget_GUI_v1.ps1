@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v1.7 (2026-08-26)'
+$ScriptVersion = 'v1.8 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -573,7 +573,7 @@ function Start-InstallJob {
                 $OutText = ($Out | Out-String)
                 $Out | Add-Content -Path $Log -Encoding utf8
 
-                if ($Code -ne 0 -and $Code -ne -1978335189 -and $OutText -match '(?i)hash' -and $OutText -match '(?i)administrat') {
+                if ($Code -ne 0 -and $Code -ne -1978335189 -and $OutText -match '(?i)hash' -and $OutText -match '(?i)administr') {
                     Add-Content -Path $Log -Value '[INFO] Falha por restricao de hash em contexto elevado - tentando via processo nao-elevado...' -Encoding utf8
                     $Code = Install-PackageNonElevated -PackageId $It.Id -LogPath $Log
                 }
