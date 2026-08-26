@@ -7,6 +7,12 @@ param(
 # ===================================================
 
 # ---------------------------------------------------
+# VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
+# identificar qual build gerou um relatorio especifico)
+# ---------------------------------------------------
+$ScriptVersion = 'v1.7 (2026-08-26)'
+
+# ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
 # Edite estas duas linhas com o seu repositorio antes de publicar.
 # ScriptUrl   = link "raw" deste proprio arquivo .ps1 no GitHub
@@ -149,6 +155,7 @@ $LogFile   = Join-Path $env:USERPROFILE ("Desktop\Relatorio_Instalacao_Winget_GU
 $Header = @"
 ===================================================
    RELATORIO DE INSTALACAO E ATUALIZACAO WINGET (GUI)
+   Versao do Script: $ScriptVersion
    Data/Hora: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')
 ===================================================
 
@@ -237,7 +244,7 @@ $Opcionais = @(
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="Instalador Multi-Modos Winget PRO" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Name="TxtTitle" Text="Instalador Multi-Modos Winget PRO" FontSize="20" FontWeight="Bold" Foreground="White"/>
                 <TextBlock Text="Marque os itens desejados em cada aba e clique em Instalar Selecionados" FontSize="12" Foreground="#AAAAAA"/>
                 <TextBlock Name="TxtOsInfo" Text="Detectando sistema..." FontSize="12" Foreground="#6FA8DC" FontWeight="SemiBold"/>
             </StackPanel>
@@ -319,6 +326,8 @@ $PanelPrincipal       = $Window.FindName('PanelPrincipal')
 $PanelOpcionais       = $Window.FindName('PanelOpcionais')
 $ImgOsLogo            = $Window.FindName('ImgOsLogo')
 $TxtOsInfo            = $Window.FindName('TxtOsInfo')
+$TxtTitle             = $Window.FindName('TxtTitle')
+$TxtTitle.Text        = "Instalador Multi-Modos Winget PRO $ScriptVersion"
 $BtnSelAllRuntimes    = $Window.FindName('BtnSelAllRuntimes')
 $BtnClearRuntimes     = $Window.FindName('BtnClearRuntimes')
 $BtnSelAllPrincipal   = $Window.FindName('BtnSelAllPrincipal')
