@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v1.9 (2026-08-26)'
+$ScriptVersion = 'v2.0 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -45,6 +45,18 @@ if (-not $CurrentPrincipal.IsInRole([Security.Principal.WindowsBuiltinRole]::Adm
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+
+# ---------------------------------------------------
+# SINCRONIZACAO DO RELOGIO DO SISTEMA
+# ---------------------------------------------------
+# Em Windows recem-instalado o relogio pode estar desatualizado antes da
+# primeira sincronizacao, o que quebra validacao de certificado TLS (ex:
+# erro "server certificate did not match" ao consultar a fonte msstore).
+try {
+    w32tm /resync /force *> $null
+} catch {
+    # Nao bloqueia o script se falhar
+}
 
 # ---------------------------------------------------
 # INSTALACAO AUTOMATICA DO WINGET (SE NAO ESTIVER PRESENTE)
@@ -527,7 +539,8 @@ function Start-InstallJob {
                 $Marker    = Join-Path $env:TEMP ('nonelev_marker_' + [guid]::NewGuid().ToString('N') + '.txt')
                 $OutLog    = Join-Path $env:TEMP ('nonelev_out_' + [guid]::NewGuid().ToString('N') + '.txt')
                 $HelperBat = Join-Path $env:TEMP ('nonelev_install_' + [guid]::NewGuid().ToString('N') + '.bat')
-                $BatBody   = "@echo off`r`nchcp 65001 >nul`r`n`"$WingetExe`" install --id $PackageId --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$OutLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
+                $SourceArg = if ($PackageId -eq '9NKSQGP7F2NH') { 'msstore' } else { 'winget' }
+                $BatBody   = "@echo off`r`nchcp 65001 >nul`r`n`"$WingetExe`" install --id $PackageId --source $SourceArg --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash > `"$OutLog`" 2>&1`r`necho %errorlevel% > `"$Marker`"`r`n"
                 Set-Content -Path $HelperBat -Value $BatBody -Encoding ASCII
 
                 Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$HelperBat`""
@@ -568,7 +581,11 @@ function Start-InstallJob {
                 Add-Content -Path $Log -Value '[INFO] Spotify nao permite instalacao em contexto elevado - usando processo nao-elevado (pode levar ate 3 minutos)' -Encoding utf8
                 $Code = Install-PackageNonElevated -PackageId $It.Id -LogPath $Log
             } else {
-                $Out     = & winget install --id $It.Id --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash 2>&1
+                # Especifica a fonte explicitamente para nao depender de consultar a
+                # fonte "msstore" quando nao e necessario (evita travar se a msstore
+                # estiver com problema de certificado, comum em Windows recem-instalado).
+                $Source  = if ($It.Id -eq '9NKSQGP7F2NH') { 'msstore' } else { 'winget' }
+                $Out     = & winget install --id $It.Id --source $Source --silent --accept-source-agreements --accept-package-agreements --ignore-security-hash 2>&1
                 $Code    = $LASTEXITCODE
                 $OutText = ($Out | Out-String)
                 $Out | Add-Content -Path $Log -Encoding utf8
