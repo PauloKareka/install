@@ -266,7 +266,7 @@ try {
     $BuildNum  = [int]$OsInfo.BuildNumber
     $OsCaption = $OsInfo.Caption -replace 'Microsoft ', ''
     $Arch      = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
-    $LogoFileName = if ($BuildNum -ge 22000) { 'win11.png' } else { 'win10.png' }
+    $LogoFileName = if ($BuildNum -ge 22000) { 'Windows_11_logo.png' } else { 'Windows_10_logo.png' }
     $TxtOsInfo.Text = "$OsCaption ($Arch) - Build $BuildNum"
 } catch {
     $LogoFileName = $null
