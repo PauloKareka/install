@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v2.2 (2026-08-26)'
+$ScriptVersion = 'v2.3 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -311,6 +311,18 @@ $Opcionais = @(
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
+            <TabItem Header="Ferramentas Extras">
+                <StackPanel Margin="10">
+                    <TextBlock Text="Estas ferramentas abrem em uma janela separada do PowerShell, direto da fonte oficial de cada projeto. Nenhuma acao e feita sem voce confirmar dentro da propria ferramenta."
+                               Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" FontSize="12"/>
+                    <Button Name="BtnToolMAS" Content="MAS - Activator" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
+                    <Button Name="BtnToolCTT" Content="Chris Titus Tech - WinUtil" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
+                    <Button Name="BtnToolWinScript" Content="WinScript - Otimizacao Completa" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
+                    <Button Name="BtnToolWinhance" Content="Winhance - Windows Enhancement Utility" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
+                    <Button Name="BtnToolDebloat" Content="Windows Debloater (Script Classico)" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
+                    <Button Name="BtnToolRaphire" Content="Win11Debloat (Raphire) - Atencao, Cuidado" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13" Background="#7A4A0E" Foreground="White"/>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <WrapPanel Grid.Row="2" Margin="0,10,0,0">
@@ -359,6 +371,12 @@ $BtnSelAllPrincipal   = $Window.FindName('BtnSelAllPrincipal')
 $BtnClearPrincipal    = $Window.FindName('BtnClearPrincipal')
 $BtnSelAllOpcionais   = $Window.FindName('BtnSelAllOpcionais')
 $BtnClearOpcionais    = $Window.FindName('BtnClearOpcionais')
+$BtnToolMAS           = $Window.FindName('BtnToolMAS')
+$BtnToolCTT           = $Window.FindName('BtnToolCTT')
+$BtnToolWinScript     = $Window.FindName('BtnToolWinScript')
+$BtnToolWinhance      = $Window.FindName('BtnToolWinhance')
+$BtnToolDebloat       = $Window.FindName('BtnToolDebloat')
+$BtnToolRaphire       = $Window.FindName('BtnToolRaphire')
 $BtnInstalar          = $Window.FindName('BtnInstalar')
 $BtnRetryFailed       = $Window.FindName('BtnRetryFailed')
 $BtnRestore           = $Window.FindName('BtnRestore')
@@ -504,6 +522,24 @@ $BtnSelAllPrincipal.Add_Click({ foreach ($Cb in $PanelPrincipal.Children) { $Cb.
 $BtnClearPrincipal.Add_Click({  foreach ($Cb in $PanelPrincipal.Children) { $Cb.IsChecked = $false } })
 $BtnSelAllOpcionais.Add_Click({ foreach ($Cb in $PanelOpcionais.Children) { $Cb.IsChecked = $true } })
 $BtnClearOpcionais.Add_Click({  foreach ($Cb in $PanelOpcionais.Children) { $Cb.IsChecked = $false } })
+
+# ---------------------------------------------------
+# FERRAMENTAS EXTRAS (abrem em uma janela de PowerShell separada)
+# ---------------------------------------------------
+function Start-ExternalTool {
+    param([string]$Url)
+    Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm '$Url' | iex`""
+}
+
+$BtnToolMAS.Add_Click({ Start-ExternalTool -Url 'https://get.activated.win' })
+$BtnToolCTT.Add_Click({ Start-ExternalTool -Url 'https://christitus.com/win' })
+$BtnToolWinScript.Add_Click({ Start-ExternalTool -Url 'https://winscript.cc/irm' })
+$BtnToolWinhance.Add_Click({ Start-ExternalTool -Url 'https://get.winhance.net' })
+$BtnToolDebloat.Add_Click({ Start-ExternalTool -Url 'https://git.io/debloat' })
+$BtnToolRaphire.Add_Click({
+    $Resp = [System.Windows.MessageBox]::Show('O Win11Debloat remove aplicativos e recursos do Windows de forma bastante agressiva. Tem certeza que deseja continuar?', 'Atencao', 'YesNo', 'Warning')
+    if ($Resp -eq 'Yes') { Start-ExternalTool -Url 'https://debloat.raphi.re/' }
+})
 
 # ---------------------------------------------------
 # INSTALACAO DOS SELECIONADOS (JOB + TIMER)
