@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v2.0 (2026-08-26)'
+$ScriptVersion = 'v2.2 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -144,6 +144,19 @@ try {
     winget settings --enable InstallerHashOverride *> $null
 } catch {
     # Nao bloqueia o script se falhar - alguns pacotes so vao falhar por hash depois
+}
+
+# ---------------------------------------------------
+# RESET DAS FONTES DO WINGET
+# ---------------------------------------------------
+# Corrige erros do tipo "server certificate did not match" ao consultar a
+# fonte msstore, comuns em Windows recem-instalado (fonte com registro
+# corrompido/desatualizado). O proprio winget sugere este comando quando
+# esse erro acontece.
+try {
+    winget source reset --force *> $null
+} catch {
+    # Nao bloqueia o script se falhar
 }
 
 # ---------------------------------------------------
@@ -590,7 +603,7 @@ function Start-InstallJob {
                 $OutText = ($Out | Out-String)
                 $Out | Add-Content -Path $Log -Encoding utf8
 
-                if ($Code -ne 0 -and $Code -ne -1978335189 -and $OutText -match '(?i)hash' -and $OutText -match '(?i)administr') {
+                if ($Code -ne 0 -and $Code -ne -1978335189 -and $OutText -match '(?i)hash' -and $OutText -match '(?i)admin') {
                     Add-Content -Path $Log -Value '[INFO] Falha por restricao de hash em contexto elevado - tentando via processo nao-elevado...' -Encoding utf8
                     $Code = Install-PackageNonElevated -PackageId $It.Id -LogPath $Log
                 }
