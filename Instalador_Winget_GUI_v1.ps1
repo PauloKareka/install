@@ -10,7 +10,7 @@ param(
 # VERSAO DO SCRIPT (aparece na tela e no log, ajuda a
 # identificar qual build gerou um relatorio especifico)
 # ---------------------------------------------------
-$ScriptVersion = 'v2.3 (2026-08-26)'
+$ScriptVersion = 'v2.4 (2026-08-26)'
 
 # ---------------------------------------------------
 # CONFIGURACAO PARA USO VIA LINK (GITHUB)
@@ -315,7 +315,6 @@ $Opcionais = @(
                 <StackPanel Margin="10">
                     <TextBlock Text="Estas ferramentas abrem em uma janela separada do PowerShell, direto da fonte oficial de cada projeto. Nenhuma acao e feita sem voce confirmar dentro da propria ferramenta."
                                Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" FontSize="12"/>
-                    <Button Name="BtnToolMAS" Content="MAS - Activator" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
                     <Button Name="BtnToolCTT" Content="Chris Titus Tech - WinUtil" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
                     <Button Name="BtnToolWinScript" Content="WinScript - Otimizacao Completa" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
                     <Button Name="BtnToolWinhance" Content="Winhance - Windows Enhancement Utility" Height="36" Margin="0,0,0,8" HorizontalAlignment="Left" Width="320" FontSize="13"/>
@@ -337,7 +336,25 @@ $Opcionais = @(
             <Button Name="BtnExportApps" Content="Exportar Backup de Apps" Width="190" Height="34" Margin="0,0,8,8"/>
         </WrapPanel>
 
-        <ProgressBar Grid.Row="3" Name="ProgressBarInstall" Height="20" Minimum="0" Maximum="1" Value="0" Margin="0,0,0,8"/>
+        <StackPanel Grid.Row="3" Margin="0,0,0,8">
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Estado da instalacao" Foreground="White" FontSize="12"/>
+                <TextBlock Grid.Column="1" Text="Instalando" Foreground="White" FontSize="12"/>
+            </Grid>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ProgressBar Grid.Column="0" Name="ProgressBarInstall" Height="20" Minimum="0" Maximum="1" Value="0" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Name="TxtProgressCounter" Text="00/00" Foreground="White" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+            </Grid>
+            <TextBlock Name="TxtCurrentItem" Text="Instalando: " Foreground="#AAAAAA" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
 
         <TextBox Grid.Row="4" Name="TxtLog" Background="#0C0C0C" Foreground="#D4D4D4" FontFamily="Consolas" FontSize="12"
                   IsReadOnly="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
@@ -371,7 +388,6 @@ $BtnSelAllPrincipal   = $Window.FindName('BtnSelAllPrincipal')
 $BtnClearPrincipal    = $Window.FindName('BtnClearPrincipal')
 $BtnSelAllOpcionais   = $Window.FindName('BtnSelAllOpcionais')
 $BtnClearOpcionais    = $Window.FindName('BtnClearOpcionais')
-$BtnToolMAS           = $Window.FindName('BtnToolMAS')
 $BtnToolCTT           = $Window.FindName('BtnToolCTT')
 $BtnToolWinScript     = $Window.FindName('BtnToolWinScript')
 $BtnToolWinhance      = $Window.FindName('BtnToolWinhance')
@@ -387,6 +403,8 @@ $BtnSaveProfile       = $Window.FindName('BtnSaveProfile')
 $BtnLoadProfile       = $Window.FindName('BtnLoadProfile')
 $BtnExportApps        = $Window.FindName('BtnExportApps')
 $ProgressBarInstall   = $Window.FindName('ProgressBarInstall')
+$TxtProgressCounter   = $Window.FindName('TxtProgressCounter')
+$TxtCurrentItem       = $Window.FindName('TxtCurrentItem')
 $TxtLog               = $Window.FindName('TxtLog')
 $TxtStatus            = $Window.FindName('TxtStatus')
 $BtnReiniciar         = $Window.FindName('BtnReiniciar')
@@ -531,7 +549,6 @@ function Start-ExternalTool {
     Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm '$Url' | iex`""
 }
 
-$BtnToolMAS.Add_Click({ Start-ExternalTool -Url 'https://get.activated.win' })
 $BtnToolCTT.Add_Click({ Start-ExternalTool -Url 'https://christitus.com/win' })
 $BtnToolWinScript.Add_Click({ Start-ExternalTool -Url 'https://winscript.cc/irm' })
 $BtnToolWinhance.Add_Click({ Start-ExternalTool -Url 'https://get.winhance.net' })
@@ -565,6 +582,10 @@ function Start-InstallJob {
     $BtnRetryFailed.IsEnabled = $false
     $ProgressBarInstall.Maximum = $ItemsToInstall.Count
     $ProgressBarInstall.Value = 0
+    $TxtProgressCounter.Text = ('{0:D2}/{1:D2}' -f 0, $ItemsToInstall.Count)
+    $TxtCurrentItem.Text = 'Instalando: '
+    $script:InstallStatusFile = Join-Path $env:TEMP ('install_status_' + [guid]::NewGuid().ToString('N') + '.txt')
+    Set-Content -Path $script:InstallStatusFile -Value '' -Encoding UTF8 -ErrorAction SilentlyContinue
     $TxtLog.Clear()
     $script:TotalOK = 0
     $script:TotalAtualizado = 0
@@ -573,7 +594,7 @@ function Start-InstallJob {
     $TxtStatus.Text = 'Instalando...'
 
     $script:InstallJob = Start-Job -ScriptBlock {
-        param($Items, $Log)
+        param($Items, $Log, $StatusFile)
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -622,6 +643,7 @@ function Start-InstallJob {
         }
 
         foreach ($It in $Items) {
+            Set-Content -Path $StatusFile -Value $It.Name -Encoding UTF8 -ErrorAction SilentlyContinue
             Add-Content -Path $Log -Value ('[PROCESSO] Tentando instalar/verificar ' + $It.Name) -Encoding utf8
             Add-Content -Path $Log -Value ('----- SAIDA WINGET: ' + $It.Name + ' -----') -Encoding utf8
 
@@ -649,7 +671,7 @@ function Start-InstallJob {
             Add-Content -Path $Log -Value '---------------------------------------------------' -Encoding utf8
             [PSCustomObject]@{ Name = $It.Name; Id = $It.Id; ExitCode = $Code }
         }
-    } -ArgumentList $ItemsToInstall, $LogFile
+    } -ArgumentList $ItemsToInstall, $LogFile, $script:InstallStatusFile
 
     $Timer.Start()
 }
@@ -691,9 +713,16 @@ $BtnRetryFailed.Add_Click({
 
 $Timer.Add_Tick({
     if ($null -eq $script:InstallJob) { return }
+
+    if ($script:InstallStatusFile -and (Test-Path $script:InstallStatusFile)) {
+        $CurrentName = Get-Content -Path $script:InstallStatusFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($CurrentName) { $TxtCurrentItem.Text = 'Instalando: ' + $CurrentName.Trim() }
+    }
+
     $Results = Receive-Job -Job $script:InstallJob -ErrorAction SilentlyContinue
     foreach ($R in $Results) {
         $ProgressBarInstall.Value++
+        $TxtProgressCounter.Text = ('{0:D2}/{1:D2}' -f [int]$ProgressBarInstall.Value, [int]$ProgressBarInstall.Maximum)
         if ($R.ExitCode -eq 0) {
             $script:TotalOK++
             $TxtLog.AppendText("[OK] " + $R.Name + "`r`n")
@@ -711,6 +740,10 @@ $Timer.Add_Tick({
         $Timer.Stop()
         Remove-Job -Job $script:InstallJob -Force
         $script:InstallJob = $null
+        if ($script:InstallStatusFile -and (Test-Path $script:InstallStatusFile)) {
+            Remove-Item -Path $script:InstallStatusFile -Force -ErrorAction SilentlyContinue
+        }
+        $TxtCurrentItem.Text = 'Instalando: '
         $BtnInstalar.IsEnabled = $true
         $BtnRetryFailed.IsEnabled = ($script:FailedItems.Count -gt 0)
         $TxtStatus.Text = "Concluido: OK=$($script:TotalOK)  Atualizados=$($script:TotalAtualizado)  Erros=$($script:TotalErro)"
@@ -965,6 +998,7 @@ $Window.Add_Closing({
     if ($script:InstalledCheckJob) { Remove-Job -Job $script:InstalledCheckJob -Force -ErrorAction SilentlyContinue }
     if ($script:ExportJob) { Remove-Job -Job $script:ExportJob -Force -ErrorAction SilentlyContinue }
     if ($script:LogoJob) { Remove-Job -Job $script:LogoJob -Force -ErrorAction SilentlyContinue }
+    if ($script:InstallStatusFile -and (Test-Path $script:InstallStatusFile)) { Remove-Item -Path $script:InstallStatusFile -Force -ErrorAction SilentlyContinue }
 })
 
 # ---------------------------------------------------
